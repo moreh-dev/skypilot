@@ -21,7 +21,7 @@ async def override_user_info_in_request_body(request: fastapi.Request,
     if auth_user is None:
         return
 
-    logger.info(f'[AccessLog] user: {auth_user.id}, '
+    logger.info(f'[AccessLog] user: {auth_user.name}, '
                 f'method: {request.method}, '
                 f'url: {request.url.path}')
 
