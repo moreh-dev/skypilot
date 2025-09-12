@@ -824,6 +824,9 @@ class Controller:
                     cluster_name = (
                         managed_job_utils.generate_managed_job_cluster_name(
                             task.name, job_id))
+                    job_status = managed_job_state.get_status(job_id)
+                    if managed_job_state.ManagedJobStatus.is_failed(job_status):
+                        managed_job_utils.mark_failed_to_cluster(cluster_name)
                     managed_job_utils.terminate_cluster(cluster_name,
                                                         _logger=job_logger)
                     status = core.status(cluster_names=[cluster_name],
