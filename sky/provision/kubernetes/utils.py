@@ -3800,10 +3800,11 @@ def should_exclude_pod_from_gpu_allocation(pod) -> bool:
 
     return False
 
-
-def get_job_pods(cluster_name: str,
-                 namespace: str,
-                 context: Optional[str] = None) -> List[Any]:
+def get_job_pods(
+    cluster_name: str,
+    namespace: str,
+    context: Optional[str] = None
+) -> List[Any]:
     """Gets all SkyPilot pods for a specific cluster in a given namespace.
 
     Args:
@@ -3813,75 +3814,70 @@ def get_job_pods(cluster_name: str,
 
     Returns:
         A list of Kubernetes pod objects matching the criteria.
-
-    Raises:
-        exceptions.ResourcesUnavailableError: If fetching pods times out.
     """
-    api = kubernetes.core_api(context)
+    if context is None:
+        context = get_current_kube_config_context_name()
+
+    # Construct the label selector for an exact match
     label_selector = f'skypilot-cluster={cluster_name}'
 
     try:
-        pod_list = api.list_namespaced_pod(
+        # Use list_namespaced_pod to search within the given namespace
+        pods = kubernetes.core_api(context).list_namespaced_pod(
             namespace=namespace,
             label_selector=label_selector,
-            _request_timeout=kubernetes.API_TIMEOUT)
-        return pod_list.items
+            _request_timeout=kubernetes.API_TIMEOUT).items
     except kubernetes.max_retry_error():
+        # Update the error message with a more specific debug command
         debug_command = (f'kubectl get pods --selector={label_selector} '
                          f'--namespace={namespace}')
         raise exceptions.ResourcesUnavailableError(
             'Timed out trying to get SkyPilot pods from the Kubernetes cluster. '
-            f'To debug, run: {debug_command}') from None
+            f'Please check if the cluster is healthy. To debug, run: {debug_command}'
+        ) from None
+    return pods
 
 
-def get_pod_status_and_node(
-        pod_name: str,
-        namespace: str,
-        context: Optional[str] = None) -> Tuple[bool, Optional[str]]:
-    """Checks a pod's status and returns its node name.
-
-    Args:
-        pod_name: The name of the pod.
-        namespace: The namespace of the pod.
-        context: The Kubernetes context to use.
-
-    Returns:
-        A tuple containing:
-        - bool: True if the pod's phase is 'Running' or 'Succeeded'.
-        - str or None: The name of the node the pod is on, or None if not found.
+def get_pod_status_and_node(pod_name: str, namespace: str,
+                            context: Optional[str]) -> Tuple[bool, str]:
     """
-    api = kubernetes_utils.core_api(context)
+    Checks if a pod's status is 'Running' and returns its node name.
+    
+    Returns a tuple: (is_running, node_name)
+    """
+    api = kubernetes.core_api(context)
     try:
-        pod_info = api.read_namespaced_pod_status(name=pod_name,
-                                                  namespace=namespace)
-
-        is_normal = pod_info.status.phase in ['Running', 'Succeeded']
+        # Get pod status details
+        pod_info = api.read_namespaced_pod_status(name=pod_name, namespace=namespace)
+        
+        # Check if the pod is in a 'Running' phase
+        is_normal = pod_info.status.phase in ['Running', 'Completed']
+        
+        # Get the node name where the pod is scheduled
         node_name = pod_info.spec.node_name
+        
         return is_normal, node_name
-
-    except kubernetes_client.ApiException as e:
-        print(f'Error getting pod {pod_name} in namespace {namespace}: {e}')
+    except kubernetes.api_exception() as e:
+        # Handle cases where the pod doesn't exist or an error occurs
+        print(f"Error getting pod {pod_name} in namespace {namespace}: {e}")
         return False, None
 
 
-def update_node_suspicion_count(node_name: str,
-                                context: Optional[str] = None) -> None:
-    """Increments the 'gpu-suspicion-count' label on a given node.
-
-    If the label does not exist, it initializes it to '1'.
-
-    Args:
-        node_name: The name of the Kubernetes node to update.
-        context: The Kubernetes context to use.
+def update_node_suspicion_count(node_name: str, context: Optional[str]) -> None:
     """
-    api = kubernetes_utils.core_api(context)
+    Increments the 'gpu-suspicion-count' label on a given node.
+    If the label doesn't exist, it's set to 1.
+    """
+    api = kubernetes.core_api(context)
     try:
+        # Get the current node object to read its labels
         node = api.read_node(name=node_name)
         labels = node.metadata.labels or {}
-
+        
         current_count = int(labels.get('gpu-suspicion-count', 0))
         new_count = current_count + 1
-
+        
+        # Define the patch with the new label value
         patch = {
             'metadata': {
                 'labels': {
@@ -3889,41 +3885,41 @@ def update_node_suspicion_count(node_name: str,
                 }
             }
         }
+        
+        # Apply the patch to the node
         api.patch_node(name=node_name, body=patch)
-        print(
-            f"Updated 'gpu-suspicion-count' on node {node_name} to {new_count}"
-        )
+        print(f"Updated 'gpu-suspicion-count' on node {node_name} to {new_count}")
+        
+    except kubernetes.api_exception() as e:
+        print(f"Error updating node label for {node_name}: {e}")
 
-    except kubernetes_client.ApiException as e:
-        print(f'Error updating node label for {node_name}: {e}')
-
-
-def get_pods_from_deployment(deployment_name: str,
-                             namespace: str,
-                             context: Optional[str] = None) -> List[str]:
-    """Returns a list of pod names managed by a specific deployment.
-
-    Args:
-        deployment_name: The name of the deployment.
-        namespace: The namespace of the deployment.
-        context: The Kubernetes context to use.
-
-    Returns:
-        A list of pod names.
+def get_pods_from_deployment(deployment_name: str, namespace: str,
+                             context: Optional[str]) -> list[str]:
     """
-    apps_api = kubernetes_utils.apps_api(context)
-    core_api = kubernetes_utils.core_api(context)
-
+    Returns a list of pod names managed by a specific deployment.
+    """
+    apps_api = kubernetes.apps_api(context)
+    core_api = kubernetes.core_api(context)
+    
+    pod_names = []
     try:
-        deployment = apps_api.read_namespaced_deployment(name=deployment_name,
-                                                         namespace=namespace)
+        # Get the deployment to find its selector labels
+        deployment = apps_api.read_namespaced_deployment(name=deployment_name, namespace=namespace)
         selector = deployment.spec.selector.match_labels
-        label_selector = ','.join([f'{k}={v}' for k, v in selector.items()])
-
-        pod_list = core_api.list_namespaced_pod(namespace=namespace,
-                                                label_selector=label_selector)
-        return [pod.metadata.name for pod in pod_list.items]
-
-    except kubernetes_client.ApiException as e:
-        print(f'Error getting pods for deployment {deployment_name}: {e}')
-        return []
+        
+        # Convert labels to a string format for the API call
+        label_selector = ','.join([f"{k}={v}" for k, v in selector.items()])
+        
+        # List all pods in the namespace that match the selector
+        pods = core_api.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=label_selector
+        )
+        
+        # Extract the names of the pods
+        pod_names = [pod.metadata.name for pod in pods.items]
+        
+    except kubernetes.api_exception() as e:
+        print(f"Error getting pods for deployment {deployment_name}: {e}")
+        
+    return pod_names
