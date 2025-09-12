@@ -3817,16 +3817,16 @@ def get_job_pods(cluster_name: str,
     Raises:
         exceptions.ResourcesUnavailableError: If fetching pods times out.
     """
-    api = kubernetes_utils.core_api(context)
+    api = kubernetes.core_api(context)
     label_selector = f'skypilot-cluster={cluster_name}'
 
     try:
         pod_list = api.list_namespaced_pod(
             namespace=namespace,
             label_selector=label_selector,
-            _request_timeout=kubernetes_utils.API_TIMEOUT)
+            _request_timeout=kubernetes.API_TIMEOUT)
         return pod_list.items
-    except MaxRetryError:
+    except kubernetes.max_retry_error():
         debug_command = (f'kubectl get pods --selector={label_selector} '
                          f'--namespace={namespace}')
         raise exceptions.ResourcesUnavailableError(
