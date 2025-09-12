@@ -1394,8 +1394,15 @@ def mark_failed(cluster_name: str) -> None:
 
     cluster_info = backend_utils._query_cluster_info_via_cloud_api(handle)
     head_id = cluster_info.head_instance_id
-    head_instance_tags = cluster_info.instances[head_id][0].tags
-    namespace = cluster_info.provider_config['namespace']
+    if head_id is not None and cluster_info.provider_config is not None:
+        head_instance_tags = cluster_info.instances[head_id][0].tags
+        namespace = cluster_info.provider_config['namespace']
+    else:
+        head_instance_tags = None 
+        namespace = None
+        raise ValueError(
+            'Failed to get SkyPilot pods from Kubernetes: '
+            f'{str(e)}') from e
     skypilot_cluster_name = head_instance_tags['skypilot-cluster']
 
     context = kubernetes_utils.get_current_kube_config_context_name()

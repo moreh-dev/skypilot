@@ -3860,7 +3860,7 @@ def get_pod_status_and_node(pod_name: str, namespace: str,
     except kubernetes.api_exception() as e:
         # Handle cases where the pod doesn't exist or an error occurs
         print(f"Error getting pod {pod_name} in namespace {namespace}: {e}")
-        return False, None
+        return False, ""
 
 
 def update_node_suspicion_count(node_name: str, context: Optional[str]) -> None:
@@ -3894,7 +3894,7 @@ def update_node_suspicion_count(node_name: str, context: Optional[str]) -> None:
         print(f"Error updating node label for {node_name}: {e}")
 
 def get_pods_from_deployment(deployment_name: str, namespace: str,
-                             context: Optional[str]) -> list[str]:
+                             context: Optional[str]) -> typing.List[str]:
     """
     Returns a list of pod names managed by a specific deployment.
     """
