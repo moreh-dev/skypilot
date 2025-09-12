@@ -1369,16 +1369,28 @@ def get_all_contexts() -> List[str]:
     # in the desired format (e.g., 'ssh-my-cluster')
     return sorted(list(set(kube_contexts + ssh_contexts)))
 
+
 def mark_failed(cluster_name: str) -> None:
+    """Marks a cluster as failed and updates node suspicion counts in Kubernetes.
+
+    Args:
+        cluster_name: The name of the cluster to mark as failed.
+
+    Raises:
+        exceptions.ClusterDoesNotExist: If the specified cluster does not exist.
+        ValueError: If SkyPilot pods cannot be retrieved from Kubernetes.
+    """
     handle = global_user_state.get_handle_from_cluster_name(cluster_name)
     if handle is None:
         raise exceptions.ClusterDoesNotExist(
             f'Cluster {cluster_name!r} does not exist.')
 
     global_user_state.add_cluster_event(
-        cluster_name, status_lib.ClusterStatus.STOPPED,
+        cluster_name,
+        status_lib.ClusterStatus.STOPPED,
         'Cluster was stopped by user.',
-        global_user_state.ClusterEventType.STATUS_CHANGE)
+        global_user_state.ClusterEventType.STATUS_CHANGE,
+    )
 
     cluster_info = backend_utils._query_cluster_info_via_cloud_api(handle)
     head_id = cluster_info.head_instance_id
@@ -1388,17 +1400,16 @@ def mark_failed(cluster_name: str) -> None:
 
     context = kubernetes_utils.get_current_kube_config_context_name()
     try:
-        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace, context)
-        nodes = set()
-        for pod in pods:
-            node_name = pod.spec.node_name
-            nodes.add(node_name)
-        
+        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace,
+                                             context)
+        # Use a set comprehension for a more concise way to get unique nodes.
+        nodes = {pod.spec.node_name for pod in pods}
+
         for node in nodes:
             kubernetes_utils.update_node_suspicion_count(node, context)
-       
 
     except exceptions.ResourcesUnavailableError as e:
         with ux_utils.print_exception_no_traceback():
-            raise ValueError('Failed to get SkyPilot pods from '
-                             f'Kubernetes: {str(e)}') from e
+            raise ValueError(
+                'Failed to get SkyPilot pods from Kubernetes: '
+                f'{str(e)}') from e

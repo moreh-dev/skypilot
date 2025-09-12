@@ -1984,6 +1984,7 @@ class ManagedJobCodeGen:
             f'"{common_utils.get_user_hash()}"; '
             f'{constants.SKY_PYTHON_CMD} -u -c {shlex.quote(generated_code)}')
 
+
 def mark_failed_to_cluster(cluster_name: str, max_retry: int = 6) -> None:
     from sky import core  # pylint: disable=import-outside-toplevel
     retry_cnt = 0
