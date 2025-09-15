@@ -485,11 +485,11 @@ class JobController:
 
                 # The job is done. Set the job to SUCCEEDED first before start
                 # downloading and streaming the logs to make it more responsive.
-                await managed_job_state.set_succeeded_async(
-                    self._job_id,
-                    task_id,
-                    end_time=success_end_time,
-                    callback_func=callback_func)
+                managed_job_state.set_succeeded(self._job_id,
+                                                task_id,
+                                                end_time=success_end_time,
+                                                callback_func=callback_func)
+                managed_job_utils.decay_failure_to_cluster(cluster_name)
                 logger.info(
                     f'Managed job {self._job_id} (task: {task_id}) SUCCEEDED. '
                     f'Cleaning up the cluster {cluster_name}.')
