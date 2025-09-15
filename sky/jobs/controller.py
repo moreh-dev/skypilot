@@ -322,6 +322,7 @@ class JobsController:
                                                 task_id,
                                                 end_time=success_end_time,
                                                 callback_func=callback_func)
+                managed_job_utils.decay_failure_to_cluster(cluster_name)
                 logger.info(
                     f'Managed job {self._job_id} (task: {task_id}) SUCCEEDED. '
                     f'Cleaning up the cluster {cluster_name}.')

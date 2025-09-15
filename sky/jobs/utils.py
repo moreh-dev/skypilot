@@ -1963,3 +1963,33 @@ def mark_failed_to_cluster(cluster_name: str, max_retry: int = 6) -> None:
             with ux_utils.enable_traceback():
                 logger.error(f'  Traceback: {traceback.format_exc()}')
             time.sleep(backoff.current_backoff())
+
+
+def decay_suspicion_to_cluster(cluster_name: str, max_retry: int = 6) -> None:
+    from sky import core  # pylint: disable=import-outside-toplevel
+    retry_cnt = 0
+
+    backoff = common_utils.Backoff(
+        initial_backoff=15,
+        # 1.6 ** 5 = 10.48576 < 20, so we won't hit this with default max_retry
+        max_backoff_factor=20)
+    while True:
+        try:
+            usage_lib.messages.usage.set_internal()
+            core.decay_failed(cluster_name)
+            return
+        except exceptions.ClusterDoesNotExist:
+            # The cluster is already down.
+            logger.debug(f'The cluster {cluster_name} is already down.')
+            return
+        except Exception as e:  # pylint: disable=broad-except
+            retry_cnt += 1
+            if retry_cnt >= max_retry:
+                raise RuntimeError(
+                    f'Failed to mark failure the cluster {cluster_name}.') from e
+            logger.error(
+                f'Failed to failure the cluster {cluster_name}. Retrying.'
+                f'Details: {common_utils.format_exception(e)}')
+            with ux_utils.enable_traceback():
+                logger.error(f'  Traceback: {traceback.format_exc()}')
+            time.sleep(backoff.current_backoff())

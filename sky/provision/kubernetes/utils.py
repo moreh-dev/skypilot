@@ -3855,7 +3855,7 @@ def get_pod_status_and_node(pod_name: str, namespace: str,
         return False, None
 
 
-def update_node_suspicion_count(node_name: str, context: Optional[str]) -> None:
+def update_node_suspicion_count(node_name: str, context: Optional[str], delta: int) -> None:
     """
     Increments the 'gpu-suspicion-count' label on a given node.
     If the label doesn't exist, it's set to 1.
@@ -3863,11 +3863,17 @@ def update_node_suspicion_count(node_name: str, context: Optional[str]) -> None:
     api = kubernetes.core_api(context)
     try:
         # Get the current node object to read its labels
+        logger.info(f'TEST UPDATE: {node_name}, {delta}')
         node = api.read_node(name=node_name)
         labels = node.metadata.labels or {}
         
         current_count = int(labels.get('gpu-suspicion-count', 0))
-        new_count = current_count + 1
+        if current_count == 0 and delta < 0:
+            return
+
+        new_count = current_count + delta
+        if new_count < 0:
+            new_count = 0
         
         # Define the patch with the new label value
         patch = {
