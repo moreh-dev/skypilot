@@ -634,6 +634,9 @@ def _cleanup(job_id: int, dag_yaml: str, pool: Optional[str]):
         if pool is None:
             cluster_name = managed_job_utils.generate_managed_job_cluster_name(
                 task.name, job_id)
+            job_status = managed_job_state.get_status(job_id)
+            if managed_job_state.ManagedJobStatus.is_failed(job_status):
+                managed_job_utils.mark_failed_to_cluster(cluster_name)
             managed_job_utils.terminate_cluster(cluster_name)
         else:
             cluster_name, job_id_on_pool_cluster = (

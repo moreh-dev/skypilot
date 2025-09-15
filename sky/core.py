@@ -1368,3 +1368,38 @@ def get_all_contexts() -> List[str]:
     # For now, assuming get_ssh_node_pool_contexts already returns them
     # in the desired format (e.g., 'ssh-my-cluster')
     return sorted(list(set(kube_contexts + ssh_contexts)))
+
+
+def mark_failed(cluster_name: str) -> None:
+    handle = global_user_state.get_handle_from_cluster_name(cluster_name)
+    if handle is None:
+        raise exceptions.ClusterDoesNotExist(
+            f'Cluster {cluster_name!r} does not exist.')
+
+    global_user_state.add_cluster_event(
+        cluster_name, status_lib.ClusterStatus.STOPPED,
+        'Cluster was stopped by user.',
+        global_user_state.ClusterEventType.STATUS_CHANGE)
+
+    cluster_info = backend_utils._query_cluster_info_via_cloud_api(handle)
+    head_id = cluster_info.head_instance_id
+    head_instance_tags = cluster_info.instances[head_id][0].tags
+    namespace = cluster_info.provider_config['namespace']
+    skypilot_cluster_name = head_instance_tags['skypilot-cluster']
+
+    context = kubernetes_utils.get_current_kube_config_context_name()
+    try:
+        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace, context)
+        nodes = set()
+        for pod in pods:
+            node_name = pod.spec.node_name
+            nodes.add(node_name)
+        
+        for node in nodes:
+            kubernetes_utils.update_node_suspicion_count(node, context)
+       
+
+    except exceptions.ResourcesUnavailableError as e:
+        with ux_utils.print_exception_no_traceback():
+            raise ValueError('Failed to get SkyPilot pods from '
+                             f'Kubernetes: {str(e)}') from e
