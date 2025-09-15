@@ -3731,3 +3731,97 @@ def should_exclude_pod_from_gpu_allocation(pod) -> bool:
         return True
 
     return False
+
+
+def get_job_pods(
+    cluster_name: str,
+    namespace: str,
+    context: Optional[str] = None
+) -> List[Any]:
+    """Gets all SkyPilot pods for a specific cluster in a given namespace.
+
+    Args:
+        cluster_name: The name of the SkyPilot cluster to filter by.
+        namespace: The Kubernetes namespace to search in.
+        context: Kubernetes context to use. If None, uses the current context.
+
+    Returns:
+        A list of Kubernetes pod objects matching the criteria.
+    """
+    if context is None:
+        context = get_current_kube_config_context_name()
+
+    # Construct the label selector for an exact match
+    label_selector = f'skypilot-cluster={cluster_name}'
+
+    try:
+        # Use list_namespaced_pod to search within the given namespace
+        pods = kubernetes.core_api(context).list_namespaced_pod(
+            namespace=namespace,
+            label_selector=label_selector,
+            _request_timeout=kubernetes.API_TIMEOUT).items
+    except kubernetes.max_retry_error():
+        # Update the error message with a more specific debug command
+        debug_command = (f'kubectl get pods --selector={label_selector} '
+                         f'--namespace={namespace}')
+        raise exceptions.ResourcesUnavailableError(
+            'Timed out trying to get SkyPilot pods from the Kubernetes cluster. '
+            f'Please check if the cluster is healthy. To debug, run: {debug_command}'
+        ) from None
+    return pods
+
+
+def get_pod_status_and_node(pod_name: str, namespace: str,
+                            context: Optional[str]) -> Tuple[bool, str]:
+    """
+    Checks if a pod's status is 'Running' and returns its node name.
+    
+    Returns a tuple: (is_running, node_name)
+    """
+    api = kubernetes.core_api(context)
+    try:
+        # Get pod status details
+        pod_info = api.read_namespaced_pod_status(name=pod_name, namespace=namespace)
+        
+        # Check if the pod is in a 'Running' phase
+        is_normal = pod_info.status.phase in ['Running', 'Completed']
+        
+        # Get the node name where the pod is scheduled
+        node_name = pod_info.spec.node_name
+        
+        return is_normal, node_name
+    except kubernetes.api_exception() as e:
+        # Handle cases where the pod doesn't exist or an error occurs
+        print(f"Error getting pod {pod_name} in namespace {namespace}: {e}")
+        return False, None
+
+
+def update_node_suspicion_count(node_name: str, context: Optional[str]) -> None:
+    """
+    Increments the 'gpu-suspicion-count' label on a given node.
+    If the label doesn't exist, it's set to 1.
+    """
+    api = kubernetes.core_api(context)
+    try:
+        # Get the current node object to read its labels
+        node = api.read_node(name=node_name)
+        labels = node.metadata.labels or {}
+        
+        current_count = int(labels.get('gpu-suspicion-count', 0))
+        new_count = current_count + 1
+        
+        # Define the patch with the new label value
+        patch = {
+            'metadata': {
+                'labels': {
+                    'gpu-suspicion-count': str(new_count)
+                }
+            }
+        }
+        
+        # Apply the patch to the node
+        api.patch_node(name=node_name, body=patch)
+        print(f"Updated 'gpu-suspicion-count' on node {node_name} to {new_count}")
+        
+    except kubernetes.api_exception() as e:
+        print(f"Error updating node label for {node_name}: {e}")
