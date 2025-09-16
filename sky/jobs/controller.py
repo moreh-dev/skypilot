@@ -485,11 +485,11 @@ class JobController:
 
                 # The job is done. Set the job to SUCCEEDED first before start
                 # downloading and streaming the logs to make it more responsive.
-                await managed_job_state.set_succeeded_async(
-                    self._job_id,
-                    task_id,
-                    end_time=success_end_time,
-                    callback_func=callback_func)
+                managed_job_state.set_succeeded(self._job_id,
+                                                task_id,
+                                                end_time=success_end_time,
+                                                callback_func=callback_func)
+                managed_job_utils.decay_failure_to_cluster(cluster_name)
                 logger.info(
                     f'Managed job {self._job_id} (task: {task_id}) SUCCEEDED. '
                     f'Cleaning up the cluster {cluster_name}.')
@@ -796,6 +796,28 @@ class ControllerManager:
 
     Many jobs will be handled by this, each by a single JobController.
     """
+    # Cleanup the HA recovery script first as it is possible that some error
+    # was raised when we construct the task object (e.g.,
+    # sky.exceptions.ResourcesUnavailableError).
+    managed_job_state.remove_ha_recovery_script(job_id)
+    dag, _ = _get_dag_and_name(dag_yaml)
+    for task in dag.tasks:
+        assert task.name is not None, task
+        if pool is None:
+            cluster_name = managed_job_utils.generate_managed_job_cluster_name(
+                task.name, job_id)
+            job_status = managed_job_state.get_status(job_id)
+            if managed_job_state.ManagedJobStatus.is_failed(job_status):
+                managed_job_utils.mark_failed_to_cluster(cluster_name)
+            managed_job_utils.terminate_cluster(cluster_name)
+        else:
+            cluster_name, job_id_on_pool_cluster = (
+                managed_job_state.get_pool_submit_info(job_id))
+            if cluster_name is not None:
+                if job_id_on_pool_cluster is not None:
+                    core.cancel(cluster_name=cluster_name,
+                                job_ids=[job_id_on_pool_cluster],
+                                _try_cancel_if_cluster_is_init=True)
 
     def __init__(self, controller_uuid: str) -> None:
         self._controller_uuid = controller_uuid
