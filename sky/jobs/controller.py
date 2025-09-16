@@ -322,6 +322,7 @@ class JobsController:
                                                 task_id,
                                                 end_time=success_end_time,
                                                 callback_func=callback_func)
+                managed_job_utils.decay_failure_to_cluster(cluster_name)
                 logger.info(
                     f'Managed job {self._job_id} (task: {task_id}) SUCCEEDED. '
                     f'Cleaning up the cluster {cluster_name}.')
@@ -634,6 +635,9 @@ def _cleanup(job_id: int, dag_yaml: str, pool: Optional[str]):
         if pool is None:
             cluster_name = managed_job_utils.generate_managed_job_cluster_name(
                 task.name, job_id)
+            job_status = managed_job_state.get_status(job_id)
+            if managed_job_state.ManagedJobStatus.is_failed(job_status):
+                managed_job_utils.mark_failed_to_cluster(cluster_name)
             managed_job_utils.terminate_cluster(cluster_name)
         else:
             cluster_name, job_id_on_pool_cluster = (
