@@ -1976,7 +1976,7 @@ def decay_suspicion_to_cluster(cluster_name: str, max_retry: int = 6) -> None:
     while True:
         try:
             usage_lib.messages.usage.set_internal()
-            core.decay_failed(cluster_name)
+            core.decay_suspicion(cluster_name)
             return
         except exceptions.ClusterDoesNotExist:
             # The cluster is already down.
