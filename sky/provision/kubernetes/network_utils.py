@@ -90,7 +90,6 @@ def fill_loadbalancer_template(namespace: str, context: Optional[str],
     content = yaml_utils.safe_load(cont)
     return content
 
-
 def fill_ingress_template(namespace: str, context: Optional[str],
                           service_details: List[Tuple[str, int,
                                                       str]], ingress_name: str,
@@ -102,6 +101,7 @@ def fill_ingress_template(namespace: str, context: Optional[str],
             f'Template "{_INGRESS_TEMPLATE_NAME}" does not exist.')
     with open(template_path, 'r', encoding='utf-8') as fin:
         template = fin.read()
+    endpoint = skypilot_config.get_nested(('api_server', 'endpoint'), None)
     annotations = skypilot_config.get_effective_region_config(
         cloud='kubernetes',
         region=context,
@@ -125,6 +125,7 @@ def fill_ingress_template(namespace: str, context: Optional[str],
         selector_value=selector_value,
         annotations=annotations,
         labels=labels,
+        endpoint=endpoint,
     )
     content = yaml_utils.safe_load(cont)
 
