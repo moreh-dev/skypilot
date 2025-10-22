@@ -263,7 +263,6 @@ def get_ingress_external_ip_and_ports(
     if not ingress_services:
         return (None, None)
 
-
     ingress_service = ingress_services[0]
     if ingress_service.status.load_balancer.ingress is None:
         # We try to get an IP/host for the service in the following order:
@@ -286,7 +285,7 @@ def get_ingress_external_ip_and_ports(
 
     endpoint = skypilot_config.get_nested(('api_server', 'endpoint'), None)
     if endpoint is not None:
-        return ip, None
+        return endpoint, None
 
     external_ip = ingress_service.status.load_balancer.ingress[
         0].ip or ingress_service.status.load_balancer.ingress[0].hostname
