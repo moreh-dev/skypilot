@@ -1,5 +1,6 @@
 """Kubernetes network provisioning utils."""
 import os
+import re
 import time
 import typing
 from typing import Dict, List, Optional, Tuple, Union
@@ -123,6 +124,8 @@ def fill_ingress_template(namespace: str, context: Optional[str],
     with open(template_path, 'r', encoding='utf-8') as fin:
         template = fin.read()
     endpoint = skypilot_config.get_nested(('api_server', 'endpoint'), None)
+    if endpoint is not None:
+        endpoint = re.sub(r'^https?://', '', endpoint)
     annotations = skypilot_config.get_effective_region_config(
         cloud='kubernetes',
         region=context,
@@ -261,8 +264,6 @@ def get_ingress_external_ip_and_ports(
         return (None, None)
 
 
-    endpoint = skypilot_config.get_nested(('api_server', 'endpoint'), None)
-
     ingress_service = ingress_services[0]
     if ingress_service.status.load_balancer.ingress is None:
         # We try to get an IP/host for the service in the following order:
@@ -270,9 +271,7 @@ def get_ingress_external_ip_and_ports(
         # 2. Use the skypilot.co/external-ip annotation in the service
         # 3. Otherwise return 'localhost'
         ip = None
-        if endpoint is not None:
-            ip = endpoint
-        elif ingress_service.spec.external_i_ps is not None:
+        if ingress_service.spec.external_i_ps is not None:
             ip = ingress_service.spec.external_i_ps[0]
         elif ingress_service.metadata.annotations is not None:
             ip = ingress_service.metadata.annotations.get(
@@ -284,6 +283,10 @@ def get_ingress_external_ip_and_ports(
         https_port = [port for port in ports if port.name == 'https'
                      ][0].node_port
         return ip, (int(http_port), int(https_port))
+
+    endpoint = skypilot_config.get_nested(('api_server', 'endpoint'), None)
+    if endpoint is not None:
+        return ip, None
 
     external_ip = ingress_service.status.load_balancer.ingress[
         0].ip or ingress_service.status.load_balancer.ingress[0].hostname
