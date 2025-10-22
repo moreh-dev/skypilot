@@ -283,6 +283,7 @@ def _query_ports_for_ingress(
         'context', kubernetes_utils.get_current_kube_config_context_name())
     ingress_details = network_utils.get_ingress_external_ip_and_ports(context)
     external_ip, external_ports = ingress_details
+    logger.debug(f'Ingress external IP: {external_ip}, ports: {external_ports}')
     if external_ip is None:
         return {}
 
