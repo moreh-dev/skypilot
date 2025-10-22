@@ -3,6 +3,7 @@ import abc
 import dataclasses
 import functools
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from sky import sky_logging
@@ -264,7 +265,10 @@ class HTTPEndpoint(SocketEndpoint):
 
     def url(self, override_ip: Optional[str] = None) -> str:
         host = override_ip if override_ip else self.host
-        return f'http://{os.path.join(super().url(host), self.path)}'
+        base_url = super().url(host)
+        if re.match(r'^https?://', base_url):
+            return f'{base_url}{"/" + self.path if self.path else ""}'
+        return f'http://{base_url}{"/" + self.path if self.path else ""}'
 
 
 @dataclasses.dataclass
@@ -274,7 +278,10 @@ class HTTPSEndpoint(SocketEndpoint):
 
     def url(self, override_ip: Optional[str] = None) -> str:
         host = override_ip if override_ip else self.host
-        return f'https://{os.path.join(super().url(host), self.path)}'
+        base_url = super().url(host)
+        if re.match(r'^https?://', base_url):
+            return f'{base_url}{"/" + self.path if self.path else ""}'
+        return f'https://{base_url}{"/" + self.path if self.path else ""}'
 
 
 def query_ports_passthrough(
