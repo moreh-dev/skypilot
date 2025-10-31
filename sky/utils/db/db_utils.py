@@ -445,15 +445,13 @@ def get_engine(
                         sqlalchemy.create_engine(
                             conn_string,
                             poolclass=sqlalchemy.pool.NullPool,
-                            pool_pre_ping=True,
-                            pool_recycle=1800))
+                            pool_pre_ping=True))
                 elif _max_connections == 1:
                     _postgres_engine_cache[conn_string] = (
                         sqlalchemy.create_engine(
                             conn_string,
                             poolclass=sqlalchemy.pool.StaticPool,
-                            pool_pre_ping=True,
-                            pool_recycle=1800))
+                            pool_pre_ping=True))
                 else:
                     _postgres_engine_cache[conn_string] = (
                         sqlalchemy.create_engine(
@@ -461,8 +459,7 @@ def get_engine(
                             poolclass=sqlalchemy.pool.QueuePool,
                             size=_max_connections,
                             max_overflow=0,
-                            pool_pre_ping=True,
-                            pool_recycle=1800))
+                            pool_pre_ping=True))
             engine = _postgres_engine_cache[conn_string]
     else:
         assert db_name is not None, 'db_name must be provided for SQLite'
@@ -475,6 +472,6 @@ def get_engine(
                 'sqlite+aiosqlite:///' + db_path, connect_args={'timeout': 30})
         if db_path not in _sqlite_engine_cache:
             _sqlite_engine_cache[db_path] = sqlalchemy.create_engine(
-                'sqlite:///' + db_path, pool_pre_ping=True, pool_recycle=1800)
+                'sqlite:///' + db_path, pool_pre_ping=True)
         engine = _sqlite_engine_cache[db_path]
     return engine
