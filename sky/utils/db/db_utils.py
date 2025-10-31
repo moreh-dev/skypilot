@@ -509,6 +509,6 @@ def get_engine(
                 'sqlite+aiosqlite:///' + db_path, connect_args={'timeout': 30})
         if db_path not in _sqlite_engine_cache:
             _sqlite_engine_cache[db_path] = sqlalchemy.create_engine(
-                'sqlite:///' + db_path)
+                'sqlite:///' + db_path, pool_pre_ping=True, pool_recycle=1800)
         engine = _sqlite_engine_cache[db_path]
     return engine
