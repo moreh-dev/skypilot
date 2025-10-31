@@ -484,8 +484,7 @@ def get_engine(
                     kw_args = {
                         'pool_size': _max_connections,
                         'max_overflow': max(0, 5 - _max_connections),
-                        'pool_pre_ping': True,
-                        'pool_recycle': 1800
+                        'pool_pre_ping': True
                     }
                     if async_engine:
                         kw_args[
@@ -509,6 +508,6 @@ def get_engine(
                 'sqlite+aiosqlite:///' + db_path, connect_args={'timeout': 30})
         if db_path not in _sqlite_engine_cache:
             _sqlite_engine_cache[db_path] = sqlalchemy.create_engine(
-                'sqlite:///' + db_path, pool_pre_ping=True, pool_recycle=1800)
+                'sqlite:///' + db_path, pool_pre_ping=True)
         engine = _sqlite_engine_cache[db_path]
     return engine
