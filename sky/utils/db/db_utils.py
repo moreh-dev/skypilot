@@ -474,8 +474,7 @@ def get_engine(
                 if _max_connections == 0:
                     kw_args = {
                         'poolclass': sqlalchemy.NullPool,
-                        'pool_pre_ping': True,
-                        'pool_recycle': 1800
+                        'pool_pre_ping': True
                     }
                     if async_engine:
                         _postgres_engine_cache[conn_string] = (
