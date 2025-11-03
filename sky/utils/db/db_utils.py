@@ -449,7 +449,7 @@ def get_engine(
                         sqlalchemy.create_engine(
                             conn_string,
                             poolclass=sqlalchemy.pool.QueuePool,
-                            size=_max_connections,
+                            pool_size=_max_connections,
                             max_overflow=0,
                             pool_pre_ping=True,
                             pool_recycle=1800))
