@@ -392,7 +392,7 @@ def get_engine(db_name: str):
                             conn_string,
                             poolclass=sqlalchemy.pool.QueuePool,
                             pool_size=_max_connections,
-                            max_overflow=0,
+                            max_overflow=5,
                             pool_pre_ping=True,
                             pool_recycle=1800))
             engine = _postgres_engine_cache[conn_string]
