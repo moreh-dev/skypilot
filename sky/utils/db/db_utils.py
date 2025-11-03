@@ -385,9 +385,7 @@ def get_engine(db_name: str):
                 if _max_connections == 0:
                     _postgres_engine_cache[conn_string] = (
                         sqlalchemy.create_engine(
-                            conn_string,
-                            poolclass=sqlalchemy.pool.NullPool,
-                            pool_pre_ping=True))
+                            conn_string, poolclass=sqlalchemy.pool.NullPool))
                 else:
                     _postgres_engine_cache[conn_string] = (
                         sqlalchemy.create_engine(
@@ -403,6 +401,6 @@ def get_engine(db_name: str):
         pathlib.Path(db_path).parents[0].mkdir(parents=True, exist_ok=True)
         if db_path not in _sqlite_engine_cache:
             _sqlite_engine_cache[db_path] = sqlalchemy.create_engine(
-                'sqlite:///' + db_path, pool_pre_ping=True, pool_recycle=1800)
+                'sqlite:///' + db_path)
         engine = _sqlite_engine_cache[db_path]
     return engine
