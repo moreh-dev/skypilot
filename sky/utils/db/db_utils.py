@@ -472,10 +472,7 @@ def get_engine(
                     f'Creating a new postgres {engine_type} engine with '
                     f'maximum {_max_connections} connections')
                 if _max_connections == 0:
-                    kw_args = {
-                        'poolclass': sqlalchemy.NullPool,
-                        'pool_pre_ping': True
-                    }
+                    kw_args = {'poolclass': sqlalchemy.NullPool}
                     if async_engine:
                         _postgres_engine_cache[conn_string] = (
                             sqlalchemy_async.create_async_engine(
@@ -512,6 +509,6 @@ def get_engine(
                 'sqlite+aiosqlite:///' + db_path, connect_args={'timeout': 30})
         if db_path not in _sqlite_engine_cache:
             _sqlite_engine_cache[db_path] = sqlalchemy.create_engine(
-                'sqlite:///' + db_path, pool_pre_ping=True, pool_recycle=1800)
+                'sqlite:///' + db_path)
         engine = _sqlite_engine_cache[db_path]
     return engine
