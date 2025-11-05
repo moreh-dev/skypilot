@@ -5,6 +5,8 @@ import { showToast } from '@/data/connectors/toast';
 import { apiClient } from '@/data/connectors/client';
 import { ENDPOINT } from '@/data/connectors/constants';
 import dashboardCache from '@/lib/cache';
+import { useQuery } from '@tanstack/react-query';
+import { queryKey } from '@/lib/cache-v2';
 
 const DEFAULT_TAIL_LINES = 10000;
 
@@ -46,6 +48,13 @@ const clusterStatusMap = {
   INIT: 'LAUNCHING',
   null: 'TERMINATED',
 };
+
+export function useClusters({ clusterNames = null } = {}) {
+  return useQuery({
+    queryKey: queryKey.clusters.list({ clusterNames }),
+    queryFn: () => getClusters({ clusterNames }),
+  });
+}
 
 export async function getClusters({ clusterNames = null } = {}) {
   try {
@@ -113,6 +122,18 @@ export async function getClusters({ clusterNames = null } = {}) {
     console.error('Error fetching clusters:', error);
     throw error;
   }
+}
+
+export function useClusterHistories({
+  clusterhash = null,
+  days = 30,
+  enabled = true,
+} = {}) {
+  return useQuery({
+    queryKey: queryKey.clusterHistories.list({ clusterhash, days }),
+    queryFn: () => getClusterHistory(clusterhash, days),
+    enabled: enabled,
+  });
 }
 
 export async function getClusterHistory(clusterHash = null, days = 30) {

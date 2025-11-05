@@ -17,7 +17,6 @@ import { CircularProgress } from '@mui/material';
 import {
   CustomTooltip as Tooltip,
   NonCapitalizedTooltip,
-  REFRESH_INTERVAL,
   TimestampWithTooltip,
 } from '@/components/utils';
 import Link from 'next/link';
@@ -31,7 +30,7 @@ import {
   TableBody,
   TableCell,
 } from '@/components/ui/table';
-import { getClusters, getClusterHistory } from '@/data/connectors/clusters';
+import { useClusters, useClusterHistories } from '@/data/connectors/clusters';
 import { getWorkspaces } from '@/data/connectors/workspaces';
 import { sortData } from '@/data/utils';
 import { SquareCode, Terminal, RotateCwIcon, Brackets } from 'lucide-react';
@@ -55,6 +54,8 @@ import cachePreloader from '@/lib/cache-preloader';
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import yaml from 'js-yaml';
 import { UserDisplay } from '@/components/elements/UserDisplay';
+import { queryKey } from '@/lib/cache-v2';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Helper function to format cost (copied from workspaces.jsx)
 // const formatCost = (cost) => { // Cost function removed
@@ -168,7 +169,6 @@ const formatDuration = (durationSeconds) => {
 export function Clusters() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const refreshDataRef = React.useRef(null);
   const [isSSHModalOpen, setIsSSHModalOpen] = useState(false);
   const [isVSCodeModalOpen, setIsVSCodeModalOpen] = useState(false);
   const [selectedCluster, setSelectedCluster] = useState(null);
@@ -210,7 +210,6 @@ export function Clusters() {
     workspace: [],
     infra: [],
   }); /// Option values for properties
-  const [preloadingComplete, setPreloadingComplete] = useState(false);
 
   // Handle URL query parameters for workspace and user filtering and show history
   useEffect(() => {
@@ -249,66 +248,10 @@ export function Clusters() {
       try {
         // Trigger cache preloading for clusters page and background preload other pages
         await cachePreloader.preloadForPage('clusters');
-
-        // Fetch configured workspaces for the filter dropdown
-        const fetchedWorkspacesConfig = await dashboardCache.get(getWorkspaces);
-        const configuredWorkspaceNames = Object.keys(fetchedWorkspacesConfig);
-
-        // Fetch all clusters to see if 'default' workspace is implicitly used
-        const allClusters = await dashboardCache.get(getClusters);
-        const uniqueClusterWorkspaces = [
-          ...new Set(
-            allClusters
-              .map((cluster) => cluster.workspace || 'default')
-              .filter((ws) => ws)
-          ),
-        ];
-
-        // Combine configured workspaces with any actively used 'default' workspace
-        const finalWorkspaces = new Set(configuredWorkspaceNames);
-        if (
-          uniqueClusterWorkspaces.includes('default') &&
-          !finalWorkspaces.has('default')
-        ) {
-          // Add 'default' if it's used by clusters but not in configured list
-          // This ensures 'default' appears if relevant, even if not explicitly in skypilot config
-        }
-        // Ensure all unique cluster workspaces are in the list, especially 'default'
-        uniqueClusterWorkspaces.forEach((wsName) =>
-          finalWorkspaces.add(wsName)
-        );
-
-        // Get unique users from cluster data for filter dropdown
-        const uniqueClusterUsers = [
-          ...new Set(
-            allClusters
-              .map((cluster) => ({
-                userId: cluster.user_hash || cluster.user,
-                username: cluster.user,
-              }))
-              .filter((user) => user.userId)
-          ).values(),
-        ];
-
-        // Process users for filtering - only use cluster users
-        const finalUsers = new Map();
-        uniqueClusterUsers.forEach((user) => {
-          finalUsers.set(user.userId, {
-            userId: user.userId,
-            username: user.username,
-            display: formatUserDisplay(user.username, user.userId),
-          });
-        });
-
-        // Signal that preloading is complete
-        setPreloadingComplete(true);
       } catch (error) {
         console.error('Error fetching data for filters:', error);
-        // Still signal completion even on error so the table can load
-        setPreloadingComplete(true);
       }
     };
-
     fetchFilterData();
   }, []);
 
@@ -415,27 +358,19 @@ export function Clusters() {
     setFilters(filters);
   };
 
-  const handleRefresh = () => {
-    // Invalidate cache to ensure fresh data is fetched
-    dashboardCache.invalidate(getClusters);
-    dashboardCache.invalidate(getWorkspaces);
-    // Only invalidate cluster history if we're currently showing history
-    if (showHistory) {
-      dashboardCache.invalidate(getClusterHistory);
-    }
-
-    // Reset preloading state so ClusterTable can fetch fresh data immediately
-    setPreloadingComplete(false);
-
-    // Trigger a new preload cycle
-    cachePreloader.preloadForPage('clusters', { force: true }).then(() => {
-      setPreloadingComplete(true);
-      // Call refresh after preloading is complete
-      if (refreshDataRef.current) {
-        refreshDataRef.current();
-      }
+  const queryClient = useQueryClient();
+  const handleRefresh = useCallback(() => {
+    queryClient.resetQueries({
+      queryKey: queryKey.clusters.all(),
+      exact: false,
     });
-  };
+    if (showHistory) {
+      queryClient.resetQueries({
+        queryKey: queryKey.clusterHistories.all(),
+        exact: false,
+      });
+    }
+  }, [queryClient, showHistory]);
 
   return (
     <>
@@ -529,9 +464,7 @@ export function Clusters() {
       />
 
       <ClusterTable
-        refreshInterval={REFRESH_INTERVAL}
         setLoading={setLoading}
-        refreshDataRef={refreshDataRef}
         filters={filters}
         showHistory={showHistory}
         historyDays={historyDays}
@@ -544,7 +477,6 @@ export function Clusters() {
           setIsVSCodeModalOpen(true);
         }}
         setOptionValues={setOptionValues}
-        preloadingComplete={preloadingComplete}
       />
 
       {/* SSH Instructions Modal */}
@@ -564,24 +496,23 @@ export function Clusters() {
 }
 
 export function ClusterTable({
-  refreshInterval,
   setLoading,
-  refreshDataRef,
   filters,
   showHistory,
   historyDays,
   onOpenSSHModal,
   onOpenVSCodeModal,
   setOptionValues,
-  preloadingComplete,
 }) {
-  const [data, setData] = useState([]);
+  const activeClusters = useClusters();
+  const clusterHistories = useClusterHistories({
+    days: historyDays,
+    enabled: showHistory,
+  });
   const [sortConfig, setSortConfig] = useState({
     key: null,
     direction: 'ascending',
   });
-  const [loading, setLocalLoading] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -611,69 +542,37 @@ export function ClusterTable({
     return optionValues;
   };
 
-  const fetchData = React.useCallback(async () => {
-    setLoading(true);
-    setLocalLoading(true);
+  const data = useMemo(() => {
+    if (activeClusters.isLoading) return [];
 
-    try {
-      // Use cached data if available, which should have been preloaded by cache preloader
-      const activeClusters = await dashboardCache.get(getClusters);
+    const clusters = activeClusters.data.map((cluster) => ({
+      ...cluster,
+      isHistorical: false,
+    }));
 
-      if (showHistory) {
-        let historyClusters = [];
-        try {
-          historyClusters = await dashboardCache.get(getClusterHistory, [
-            null,
-            historyDays,
-          ]);
-        } catch (error) {
-          console.error('Error fetching cluster history:', error);
-        }
-        // Mark clusters as active or historical for UI distinction
-        const markedActiveClusters = activeClusters.map((cluster) => ({
-          ...cluster,
-          isHistorical: false,
-        }));
-        const markedHistoryClusters = historyClusters.map((cluster) => ({
-          ...cluster,
-          isHistorical: true,
-        }));
-        // Combine and remove duplicates (prefer active over historical)
-        const combinedData = [...markedActiveClusters];
-        markedHistoryClusters.forEach((histCluster) => {
-          const existsInActive = activeClusters.some(
-            (activeCluster) =>
-              activeCluster.cluster_hash === histCluster.cluster_hash
-          );
-          if (!existsInActive) {
-            combinedData.push(histCluster);
-          }
-        });
+    if (showHistory) {
+      if (clusterHistories.isLoading) return [];
 
-        setOptionValues(fetchOptionValuesFromClusters(combinedData));
+      const notActive = clusterHistories.data?.filter((history) =>
+        clusters.every((c) => c.cluster_hash !== history.cluster_hash)
+      );
+      const maskedHistories = notActive.map((history) => ({
+        ...history,
+        isHistorical: true,
+      }));
 
-        setData(combinedData);
-      } else {
-        // Mark active clusters for consistency
-        const markedActiveClusters = activeClusters.map((cluster) => ({
-          ...cluster,
-          isHistorical: false,
-        }));
-
-        setOptionValues(fetchOptionValuesFromClusters(markedActiveClusters));
-
-        setData(markedActiveClusters);
-      }
-    } catch (error) {
-      console.error('Error fetching cluster data:', error);
-      setOptionValues(fetchOptionValuesFromClusters([]));
-      setData([]);
+      clusters.push(...maskedHistories);
     }
 
-    setLoading(false);
-    setLocalLoading(false);
-    setIsInitialLoad(false);
-  }, [setLoading, showHistory, historyDays, setOptionValues]);
+    return clusters;
+  }, [showHistory, activeClusters.data, clusterHistories.data]);
+
+  useEffect(() => {
+    setLoading(
+      activeClusters.isLoading || (showHistory && clusterHistories.isLoading)
+    );
+    setOptionValues(fetchOptionValuesFromClusters(data));
+  }, [data, showHistory, activeClusters, clusterHistories]);
 
   // Utility: checks a condition based on operator
   const evaluateCondition = (item, filter) => {
@@ -732,38 +631,6 @@ export function ClusterTable({
 
     return sortData(filteredData, sortConfig.key, sortConfig.direction);
   }, [data, sortConfig, filters]);
-
-  // Expose fetchData to parent component
-  React.useEffect(() => {
-    if (refreshDataRef) {
-      refreshDataRef.current = fetchData;
-    }
-  }, [refreshDataRef, fetchData]);
-
-  useEffect(() => {
-    setData([]);
-    let isCurrent = true;
-
-    // Only start fetching data after preloading is complete
-    if (preloadingComplete) {
-      fetchData();
-
-      const interval = setInterval(() => {
-        if (isCurrent && window.document.visibilityState === 'visible') {
-          fetchData();
-        }
-      }, refreshInterval);
-
-      return () => {
-        isCurrent = false;
-        clearInterval(interval);
-      };
-    }
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [refreshInterval, fetchData, preloadingComplete]);
 
   // Reset to first page when data changes
   useEffect(() => {
@@ -876,7 +743,8 @@ export function ClusterTable({
             </TableHeader>
 
             <TableBody>
-              {loading || !preloadingComplete ? (
+              {activeClusters.isLoading ||
+              (showHistory && clusterHistories.isLoading) ? (
                 <TableRow>
                   <TableCell
                     colSpan={9}
