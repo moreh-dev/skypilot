@@ -6,6 +6,13 @@ import { apiClient } from '@/data/connectors/client';
 import { ENDPOINT } from '@/data/connectors/constants';
 import dashboardCache from '@/lib/cache';
 
+/**
+ * @typedef {import('@/types/cluster').Cluster} Cluster
+ * @typedef {import('@/types/cluster').ClusterDatabaseSchema} ClusterDatabaseSchema
+ * @typedef {import('@/types/cluster').ClusterHistory} ClusterHistory
+ * @typedef {import('@/types/cluster').ClusterHistoryDatabaseSchema} ClusterHistoryDatabaseSchema
+ */
+
 const DEFAULT_TAIL_LINES = 10000;
 
 /**
@@ -47,6 +54,12 @@ const clusterStatusMap = {
   null: 'TERMINATED',
 };
 
+/**
+ * Fetch clusters from the API
+ * @param {Object} [options={}] - Options for fetching clusters
+ * @param {string[]|null} [options.clusterNames=null] - Optional array of cluster names to fetch
+ * @returns {Promise<Cluster[]>} Array of cluster objects
+ */
 export async function getClusters({ clusterNames = null } = {}) {
   try {
     const clusters = await apiClient.fetch('/status', {
@@ -57,6 +70,7 @@ export async function getClusters({ clusterNames = null } = {}) {
       summary_response: clusterNames == null,
     });
 
+    /** @type {Cluster[]} */
     const clusterData = clusters.map((cluster) => {
       // Use cluster_hash for lookup, assuming it's directly in cluster.cluster_hash
       let region_or_zone = '';
@@ -115,6 +129,12 @@ export async function getClusters({ clusterNames = null } = {}) {
   }
 }
 
+/**
+ * Fetch cluster history from the API
+ * @param {string|null} clusterHash - Optional cluster hash to filter by
+ * @param {number} days - Number of days of history to fetch (default: 30)
+ * @returns {Promise<ClusterHistory[]>} Array of historical cluster objects
+ */
 export async function getClusterHistory(clusterHash = null, days = 30) {
   try {
     const requestBody = {
@@ -129,8 +149,7 @@ export async function getClusterHistory(clusterHash = null, days = 30) {
 
     const history = await apiClient.fetch('/cost_report', requestBody);
 
-    console.log('Raw cluster history data:', history); // Debug log
-
+    /** @type {ClusterHistory[]} */
     const historyData = history.map((cluster) => {
       // Get cloud name from resources if available
       let cloud = 'Unknown';
@@ -182,7 +201,6 @@ export async function getClusterHistory(clusterHash = null, days = 30) {
       };
     });
 
-    console.log('Processed cluster history data:', historyData); // Debug log
     return historyData;
   } catch (error) {
     console.error('Error fetching cluster history:', error);

@@ -54,6 +54,7 @@ export const DASHBOARD_CACHE_FUNCTIONS = {
     ],
     users: ['getUsers', 'getClusters', 'getManagedJobs'],
     volumes: ['getVolumes'],
+    report: ['getClusters', 'getClusterHistory', 'getUsers'],
   },
 };
 
