@@ -226,9 +226,21 @@ def _list_accelerators(
                     continue
 
                 # Generate the accelerator quantities
-                accelerator_count = (
-                    kubernetes_utils.get_node_accelerator_count(
-                        context, node.status.allocatable))
+                # For Tenstorrent NPU, read the resource count directly from
+                # tenstorrent.com/npu resource instead of using get_node_accelerator_count
+                # which may prioritize GPU resources
+                if kubernetes_utils.is_tenstorrent_npu(accelerator_name):
+                    if (kubernetes_utils.TENSTORRENT_NPU_RESOURCE_KEY in
+                        node.status.allocatable):
+                        accelerator_count = int(
+                            node.status.allocatable[
+                                kubernetes_utils.TENSTORRENT_NPU_RESOURCE_KEY])
+                    else:
+                        accelerator_count = 0
+                else:
+                    accelerator_count = (
+                        kubernetes_utils.get_node_accelerator_count(
+                            context, node.status.allocatable))
 
                 if accelerator_count > 0:
                     # TPUs are counted in a different way compared to GPUs.
@@ -238,6 +250,7 @@ def _list_accelerators(
                         accelerators_qtys.add(
                             (accelerator_name, accelerator_count))
                     else:
+                        # For Tenstorrent NPU and GPUs, generate quantity list
                         count = 1
                         while count <= accelerator_count:
                             accelerators_qtys.add((accelerator_name, count))
