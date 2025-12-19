@@ -156,6 +156,7 @@ MEMORY_SIZE_UNITS = {
 # or status.capacity fields to indicate the available resources on the node.
 SUPPORTED_GPU_RESOURCE_KEYS = {'amd': 'amd.com/gpu', 'nvidia': 'nvidia.com/gpu'}
 TPU_RESOURCE_KEY = 'google.com/tpu'
+TENSTORRENT_NPU_RESOURCE_KEY = 'tenstorrent.com/npu'
 
 NO_ACCELERATOR_HELP_MESSAGE = (
     'If your cluster contains GPUs or TPUs, make sure '
@@ -1169,16 +1170,16 @@ def get_autoscaler(autoscaler_type: kubernetes_enums.KubernetesAutoscalerType):
 @annotations.lru_cache(scope='request', maxsize=10)
 def detect_accelerator_resource(
         context: Optional[str]) -> Tuple[bool, Set[str]]:
-    """Checks if the Kubernetes cluster has GPU/TPU resource.
+    """Checks if the Kubernetes cluster has GPU/TPU/NPU resource.
 
-    Three types of accelerator resources are available which are each checked
-    with amd.com/gpu, nvidia.com/gpu and google.com/tpu. If amd.com/gpu or nvidia.com/gpu resource is
+    Multiple types of accelerator resources are available which are each checked
+    with amd.com/gpu, nvidia.com/gpu, google.com/tpu, and tenstorrent.com/npu. If amd.com/gpu or nvidia.com/gpu resource is
     missing, that typically means that the Kubernetes cluster does not have
     GPUs or the amd/nvidia GPU operator and/or device drivers are not installed.
 
     Returns:
-        bool: True if the cluster has GPU_RESOURCE_KEY or TPU_RESOURCE_KEY
-            resource, False otherwise.
+        bool: True if the cluster has GPU_RESOURCE_KEY, TPU_RESOURCE_KEY, or
+            TENSTORRENT_NPU_RESOURCE_KEY resource, False otherwise.
     """
     # Get the set of resources across all nodes
     cluster_resources: Set[str] = set()
@@ -1186,7 +1187,8 @@ def detect_accelerator_resource(
     for node in nodes:
         cluster_resources.update(node.status.allocatable.keys())
     has_accelerator = (get_gpu_resource_key(context) in cluster_resources or
-                       TPU_RESOURCE_KEY in cluster_resources)
+                       TPU_RESOURCE_KEY in cluster_resources or
+                       TENSTORRENT_NPU_RESOURCE_KEY in cluster_resources)
 
     return has_accelerator, cluster_resources
 
@@ -1504,18 +1506,27 @@ def get_accelerator_label_keys(context: Optional[str],) -> List[str]:
     return label_formatter.get_label_keys()
 
 
+def is_tenstorrent_npu(acc_type: str) -> bool:
+    """Check if accelerator type is Tenstorrent NPU."""
+    if not acc_type:
+        return False
+    acc_type_upper = acc_type.upper()
+    return acc_type_upper.startswith(
+        'TT') or 'TENSTORRENT' in acc_type_upper or acc_type_upper == 'TT-NPU'
+
+
 def get_accelerator_label_key_values(
     context: Optional[str],
     acc_type: str,
     acc_count: int,
     check_mode=False
 ) -> Tuple[Optional[str], Optional[List[str]], Optional[str], Optional[str]]:
-    """Returns the label key and value for the given GPU/TPU type.
+    """Returns the label key and value for the given GPU/TPU/NPU type.
 
     Args:
-        acc_type: The GPU/TPU type required by the task.
-        acc_count: Number of GPU/TPUs required by the task.
-        check_mode: If True, only checks if the cluster has GPU/TPU resources
+        acc_type: The GPU/TPU/NPU type required by the task.
+        acc_count: Number of GPU/TPUs/NPUs required by the task.
+        check_mode: If True, only checks if the cluster has GPU/TPU/NPU resources
             and labels are setup on the cluster. acc_type is ignore does not
             return the label key and value. Useful for checking if GPUs are
             configured correctly on the cluster without explicitly requesting
@@ -1527,13 +1538,20 @@ def get_accelerator_label_key_values(
         True.
     Raises:
         ResourcesUnavailableError: Can be raised from the following conditions:
-            - The cluster does not have GPU/TPU resources
-                (amd.com/gpu, nvidia.com/gpu, google.com/tpu)
+            - The cluster does not have GPU/TPU/NPU resources
+                (amd.com/gpu, nvidia.com/gpu, google.com/tpu, tenstorrent.com/npu)
             - The cluster has GPU/TPU resources, but no node in the cluster has
               an accelerator label.
             - The cluster has a node with an invalid accelerator label value.
-            - The cluster doesn't have any nodes with acc_type GPU/TPU
+            - The cluster doesn't have any nodes with acc_type GPU/TPU/NPU
     """
+    # Handle Tenstorrent NPU early
+    if is_tenstorrent_npu(acc_type):
+        if check_mode:
+            return None, None, None, None
+        # Tenstorrent NPU uses skypilot.co/accelerator label format
+        return ('skypilot.co/accelerator', ['tt-npu'], None, None)
+
     # Check if the cluster has GPU resources
     # TODO(romilb): This assumes the accelerator is a amd/nvidia GPU. We
     #  need to support TPUs and other accelerators as well.
@@ -3726,11 +3744,9 @@ def get_cleaned_context_and_cloud_str(
     return context, cloud_str
 
 
-def get_job_pods(
-    cluster_name: str,
-    namespace: str,
-    context: Optional[str] = None
-) -> List[Any]:
+def get_job_pods(cluster_name: str,
+                 namespace: str,
+                 context: Optional[str] = None) -> List[Any]:
     """Gets all SkyPilot pods for a specific cluster in a given namespace.
 
     Args:
@@ -3768,20 +3784,21 @@ def get_pod_status_and_node(pod_name: str, namespace: str,
                             context: Optional[str]) -> Tuple[bool, str]:
     """
     Checks if a pod's status is 'Running' and returns its node name.
-    
+
     Returns a tuple: (is_running, node_name)
     """
     api = kubernetes.core_api(context)
     try:
         # Get pod status details
-        pod_info = api.read_namespaced_pod_status(name=pod_name, namespace=namespace)
-        
+        pod_info = api.read_namespaced_pod_status(name=pod_name,
+                                                  namespace=namespace)
+
         # Check if the pod is in a 'Running' phase
         is_normal = pod_info.status.phase in ['Running', 'Completed']
-        
+
         # Get the node name where the pod is scheduled
         node_name = pod_info.spec.node_name
-        
+
         return is_normal, node_name
     except kubernetes.api_exception() as e:
         # Handle cases where the pod doesn't exist or an error occurs
@@ -3789,7 +3806,8 @@ def get_pod_status_and_node(pod_name: str, namespace: str,
         return False, None
 
 
-def update_node_suspicion_count(node_name: str, context: Optional[str], delta: int) -> None:
+def update_node_suspicion_count(node_name: str, context: Optional[str],
+                                delta: int) -> None:
     """
     Increments the 'gpu-suspicion-count' label on a given node.
     If the label doesn't exist, it's set to 1.
@@ -3800,7 +3818,7 @@ def update_node_suspicion_count(node_name: str, context: Optional[str], delta: i
         logger.info(f'TEST UPDATE: {node_name}, {delta}')
         node = api.read_node(name=node_name)
         labels = node.metadata.labels or {}
-        
+
         current_count = int(labels.get('gpu-suspicion-count', 0))
         if current_count == 0 and delta < 0:
             return
@@ -3808,7 +3826,7 @@ def update_node_suspicion_count(node_name: str, context: Optional[str], delta: i
         new_count = current_count + delta
         if new_count < 0:
             new_count = 0
-        
+
         # Define the patch with the new label value
         patch = {
             'metadata': {
@@ -3817,10 +3835,11 @@ def update_node_suspicion_count(node_name: str, context: Optional[str], delta: i
                 }
             }
         }
-        
+
         # Apply the patch to the node
         api.patch_node(name=node_name, body=patch)
-        print(f"Updated 'gpu-suspicion-count' on node {node_name} to {new_count}")
-        
+        print(
+            f"Updated 'gpu-suspicion-count' on node {node_name} to {new_count}")
+
     except kubernetes.api_exception() as e:
         print(f"Error updating node label for {node_name}: {e}")
