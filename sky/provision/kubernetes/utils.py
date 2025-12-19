@@ -3343,6 +3343,8 @@ def get_node_accelerator_count(context: Optional[str],
         return int(attribute_dict[gpu_resource_name])
     elif TPU_RESOURCE_KEY in attribute_dict:
         return int(attribute_dict[TPU_RESOURCE_KEY])
+    elif TENSTORRENT_NPU_RESOURCE_KEY in attribute_dict:
+        return int(attribute_dict[TENSTORRENT_NPU_RESOURCE_KEY])
     return 0
 
 
