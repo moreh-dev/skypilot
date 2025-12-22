@@ -1550,7 +1550,8 @@ def get_accelerator_label_key_values(
         if check_mode:
             return None, None, None, None
         # Tenstorrent NPU uses skypilot.co/accelerator label format
-        return ('skypilot.co/accelerator', ['tt-npu'], None, None)
+        # TT-LoudBox: device plugin allocates all tenstorrent devices on a node as a single unit
+        return ('skypilot.co/accelerator', ['loudbox'], None, None)
 
     # Check if the cluster has GPU resources
     # TODO(romilb): This assumes the accelerator is a amd/nvidia GPU. We
