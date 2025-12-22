@@ -1506,15 +1506,6 @@ def get_accelerator_label_keys(context: Optional[str],) -> List[str]:
     return label_formatter.get_label_keys()
 
 
-def is_tenstorrent_npu(acc_type: str) -> bool:
-    """Check if accelerator type is Tenstorrent NPU."""
-    if not acc_type:
-        return False
-    acc_type_upper = acc_type.upper()
-    return acc_type_upper.startswith(
-        'TT') or 'TENSTORRENT' in acc_type_upper or acc_type_upper == 'TT-NPU'
-
-
 def get_accelerator_label_key_values(
     context: Optional[str],
     acc_type: str,
@@ -1545,14 +1536,6 @@ def get_accelerator_label_key_values(
             - The cluster has a node with an invalid accelerator label value.
             - The cluster doesn't have any nodes with acc_type GPU/TPU/NPU
     """
-    # Handle Tenstorrent NPU early
-    if is_tenstorrent_npu(acc_type):
-        if check_mode:
-            return None, None, None, None
-        # Tenstorrent NPU uses skypilot.co/accelerator label format
-        # TT-LoudBox: device plugin allocates all tenstorrent devices on a node as a single unit
-        return ('skypilot.co/accelerator', ['loudbox'], None, None)
-
     # Check if the cluster has GPU resources
     # TODO(romilb): This assumes the accelerator is a amd/nvidia GPU. We
     #  need to support TPUs and other accelerators as well.
@@ -1655,7 +1638,7 @@ def get_accelerator_label_key_values(
                         # match either canonicalized name or raw name
                         accelerator = (label_formatter.
                                        get_accelerator_from_label_value(value))
-                        viable = [value.lower(), accelerator.lower()]
+                        viable = [value.lower(), accelerator.lower()]                        
                         if acc_type.lower() not in viable:
                             continue
                         if is_tpu_on_gke(acc_type):
