@@ -570,7 +570,6 @@ class Kubernetes(clouds.Cloud):
              k8s_topology_label_value) = (
                  kubernetes_utils.get_accelerator_label_key_values(
                      context, acc_type, acc_count))
-            # Determine resource key based on accelerator type
             if (k8s_acc_label_key ==
                     kubernetes_utils.GKELabelFormatter.TPU_LABEL_KEY):
                 tpu_requested = True

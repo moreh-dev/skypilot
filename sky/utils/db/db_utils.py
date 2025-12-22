@@ -483,7 +483,7 @@ def get_engine(
                 else:
                     kw_args = {
                         'pool_size': _max_connections,
-                        'max_overflow': 5,
+                        'max_overflow': max(0, 5 - _max_connections),
                         'pool_pre_ping': True,
                         'pool_recycle': 1800
                     }
