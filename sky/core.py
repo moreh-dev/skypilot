@@ -1358,24 +1358,33 @@ def mark_failed(cluster_name: str) -> None:
     if handle is None:
         raise exceptions.ClusterDoesNotExist(
             f'Cluster {cluster_name!r} does not exist.')
-
+    # pylint: disable=protected-access
     cluster_info = backend_utils._query_cluster_info_via_cloud_api(handle)
     head_id = cluster_info.head_instance_id
+    if head_id is None:
+        raise ValueError('Head instance ID is None for cluster '
+                         f'{cluster_name!r}.')
     head_instance_tags = cluster_info.instances[head_id][0].tags
-    namespace = cluster_info.provider_config['namespace']
+    if cluster_info.provider_config is None:
+        raise ValueError('Provider config is None for cluster '
+                         f'{cluster_name!r}.')
+    namespace = cluster_info.provider_config.get('namespace')
+    if namespace is None:
+        raise ValueError('Namespace is None for cluster '
+                         f'{cluster_name!r}.')
     skypilot_cluster_name = head_instance_tags['skypilot-cluster']
 
     context = kubernetes_utils.get_current_kube_config_context_name()
     try:
-        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace, context)
+        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace,
+                                             context)
         nodes = set()
         for pod in pods:
             node_name = pod.spec.node_name
             nodes.add(node_name)
-        
+
         for node in nodes:
             kubernetes_utils.update_node_suspicion_count(node, context, 1)
-       
 
     except exceptions.ResourcesUnavailableError as e:
         with ux_utils.print_exception_no_traceback():
@@ -1390,23 +1399,33 @@ def decay_suspicion(cluster_name: str) -> None:
         raise exceptions.ClusterDoesNotExist(
             f'Cluster {cluster_name!r} does not exist.')
 
+    # pylint: disable=protected-access
     cluster_info = backend_utils._query_cluster_info_via_cloud_api(handle)
     head_id = cluster_info.head_instance_id
+    if head_id is None:
+        raise ValueError('Head instance ID is None for cluster '
+                         f'{cluster_name!r}.')
     head_instance_tags = cluster_info.instances[head_id][0].tags
-    namespace = cluster_info.provider_config['namespace']
+    if cluster_info.provider_config is None:
+        raise ValueError('Provider config is None for cluster '
+                         f'{cluster_name!r}.')
+    namespace = cluster_info.provider_config.get('namespace')
+    if namespace is None:
+        raise ValueError('Namespace is None for cluster '
+                         f'{cluster_name!r}.')
     skypilot_cluster_name = head_instance_tags['skypilot-cluster']
 
     context = kubernetes_utils.get_current_kube_config_context_name()
     try:
-        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace, context)
+        pods = kubernetes_utils.get_job_pods(skypilot_cluster_name, namespace,
+                                             context)
         nodes = set()
         for pod in pods:
             node_name = pod.spec.node_name
             nodes.add(node_name)
-        
+
         for node in nodes:
             kubernetes_utils.update_node_suspicion_count(node, context, -1)
-       
 
     except exceptions.ResourcesUnavailableError as e:
         with ux_utils.print_exception_no_traceback():

@@ -1036,6 +1036,7 @@ def _create_pods(region: str, cluster_name: str, cluster_name_on_cloud: str,
 
     needs_gpus = False
     needs_gpus_nvidia = False
+    needs_tenstorrent_npu = False
     limits = pod_spec['spec']['containers'][0].get('resources',
                                                    {}).get('limits')
     if limits is not None:
@@ -1043,6 +1044,8 @@ def _create_pods(region: str, cluster_name: str, cluster_name_on_cloud: str,
                                 0) > 0
         needs_gpus_nvidia = limits.get(
             kubernetes_utils.SUPPORTED_GPU_RESOURCE_KEYS['nvidia'], 0) > 0
+        needs_tenstorrent_npu = limits.get(
+            kubernetes_utils.TENSTORRENT_NPU_RESOURCE_KEY, 0) > 0
 
     # TPU pods provisioned on GKE use the default containerd runtime.
     # Reference: https://cloud.google.com/kubernetes-engine/docs/how-to/migrate-containerd#overview  # pylint: disable=line-too-long
@@ -1161,6 +1164,34 @@ def _create_pods(region: str, cluster_name: str, cluster_name_on_cloud: str,
             pod_spec_copy['spec']['tolerations'] = existing_tolerations + [
                 gpu_toleration
             ]
+
+        # Add Tenstorrent NPU toleration if Tenstorrent NPU is requested.
+        # Tenstorrent NPU nodes have a taint, tenstorrent.com/npu:NoSchedule.
+        # TT-LoudBox: device plugin allocates all tenstorrent devices on a node as a single unit.
+        if needs_tenstorrent_npu:
+            tenstorrent_toleration = {
+                'key': kubernetes_utils.TENSTORRENT_NPU_RESOURCE_KEY,
+                'operator': 'Exists',
+                'effect': 'NoSchedule'
+            }
+            # Preserve existing tolerations if any
+            existing_tolerations = pod_spec_copy['spec'].get('tolerations', [])
+            pod_spec_copy['spec']['tolerations'] = existing_tolerations + [
+                tenstorrent_toleration
+            ]
+
+            # Add hugepages-1Gi: 16Gi for Tenstorrent NPU
+            container = pod_spec_copy['spec']['containers'][0]
+            if 'resources' not in container:
+                container['resources'] = {}
+            resources = container['resources']
+            if 'requests' not in resources:
+                resources['requests'] = {}
+            if 'limits' not in resources:
+                resources['limits'] = {}
+
+            resources['requests']['hugepages-1Gi'] = '16Gi'
+            resources['limits']['hugepages-1Gi'] = '16Gi'
 
         if to_create_deployment:
             volume.create_persistent_volume_claim(namespace, context, pvc_spec)

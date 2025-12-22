@@ -562,40 +562,24 @@ class Kubernetes(clouds.Cloud):
         k8s_resource_key = None
         tpu_requested = False
         avoid_label_keys = None
-        k8s_tenstorrent_npu_requested = False
-        k8s_hugepages_1gi = None
-        k8s_tolerations = None
 
-        # If GPU/TPUs/NPUs are requested, set node label to match the accelerator type.
+        # If GPU/TPUs/NPUs are requested, set node label to match the
+        # accelerator type.
         if acc_count > 0 and acc_type is not None:
-            # Check if Tenstorrent NPU is requested
-            if kubernetes_utils.is_tenstorrent_npu(acc_type):
-                k8s_tenstorrent_npu_requested = True
+            (k8s_acc_label_key, k8s_acc_label_values, k8s_topology_label_key,
+             k8s_topology_label_value) = (
+                 kubernetes_utils.get_accelerator_label_key_values(
+                     context, acc_type, acc_count))
+            # Determine resource key based on accelerator type
+            if (k8s_acc_label_key ==
+                    kubernetes_utils.GKELabelFormatter.TPU_LABEL_KEY):
+                tpu_requested = True
+                k8s_resource_key = kubernetes_utils.TPU_RESOURCE_KEY
+            elif kubernetes_utils.is_tenstorrent_npu(acc_type):
                 k8s_resource_key = kubernetes_utils.TENSTORRENT_NPU_RESOURCE_KEY
-                (k8s_acc_label_key, k8s_acc_label_values,
-                 k8s_topology_label_key, k8s_topology_label_value) = (
-                     kubernetes_utils.get_accelerator_label_key_values(
-                         context, acc_type, acc_count))
-                # Add Tenstorrent NPU toleration
-                k8s_tolerations = [{
-                    'key': 'tenstorrent.com/npu',
-                    'operator': 'Exists',
-                    'effect': 'NoSchedule'
-                }]
-                # Add hugepages-1Gi: 16Gi for Tenstorrent NPU
-                k8s_hugepages_1gi = '16Gi'
             else:
-                (k8s_acc_label_key, k8s_acc_label_values,
-                 k8s_topology_label_key, k8s_topology_label_value) = (
-                     kubernetes_utils.get_accelerator_label_key_values(
-                         context, acc_type, acc_count))
-                if (k8s_acc_label_key ==
-                        kubernetes_utils.GKELabelFormatter.TPU_LABEL_KEY):
-                    tpu_requested = True
-                    k8s_resource_key = kubernetes_utils.TPU_RESOURCE_KEY
-                else:
-                    k8s_resource_key = kubernetes_utils.get_gpu_resource_key(
-                        context)
+                k8s_resource_key = kubernetes_utils.get_gpu_resource_key(
+                    context)
         else:
             # If no GPUs are requested, we set NVIDIA_VISIBLE_DEVICES=none to
             # maintain GPU isolation. This is to override the default behavior
@@ -792,9 +776,6 @@ class Kubernetes(clouds.Cloud):
             'k8s_enable_flex_start': enable_flex_start,
             'k8s_max_run_duration_seconds': max_run_duration_seconds,
             'k8s_network_type': network_type.value,
-            'k8s_tenstorrent_npu_requested': k8s_tenstorrent_npu_requested,
-            'k8s_hugepages_1gi': k8s_hugepages_1gi,
-            'k8s_tolerations': k8s_tolerations,
         }
 
         # Add kubecontext if it is set. It may be None if SkyPilot is running

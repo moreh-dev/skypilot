@@ -438,21 +438,12 @@ available_node_types:
                   topologyKey: kubernetes.io/hostname
           {% endif %}
         {% endif %}
-        {% if k8s_spot_label_key is not none or k8s_tolerations is not none %}
+        {% if k8s_spot_label_key is not none %}
         tolerations:
-          {% if k8s_spot_label_key is not none %}
           - key: {{k8s_spot_label_key}}
             operator: Equal
             value: {{k8s_spot_label_value|tojson}}
             effect: NoSchedule
-          {% endif %}
-          {% if k8s_tolerations is not none %}
-          {% for toleration in k8s_tolerations %}
-          - key: {{toleration.key}}
-            operator: {{toleration.operator}}
-            effect: {{toleration.effect}}
-          {% endfor %}
-          {% endif %}
         {% endif %}
 
         # This volume allocates shared memory for Ray to use for its plasma
@@ -1171,21 +1162,13 @@ available_node_types:
               # https://cloud.google.com/kubernetes-engine/docs/concepts/tpus#how_tpus_work
               {{k8s_resource_key}}: {{accelerator_count}}
               {% endif %}
-              {% if k8s_hugepages_1gi is not none %}
-              hugepages-1Gi: {{k8s_hugepages_1gi}}
-              {% endif %}
               {% if k8s_network_type == 'coreweave' %}
               rdma/ib: 1
               {% endif %}
-            {% if k8s_resource_key is not none or k8s_hugepages_1gi is not none %}
+            {% if k8s_resource_key is not none %}
             limits:
               # Limits need to be defined for GPU/TPU/NPU requests
-              {% if k8s_resource_key is not none %}
               {{k8s_resource_key}}: {{accelerator_count}}
-              {% endif %}
-              {% if k8s_hugepages_1gi is not none %}
-              hugepages-1Gi: {{k8s_hugepages_1gi}}
-              {% endif %}
               {% if k8s_network_type == 'coreweave' %}
               rdma/ib: 1
               {% endif %}

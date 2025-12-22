@@ -1638,7 +1638,7 @@ def get_accelerator_label_key_values(
                         # match either canonicalized name or raw name
                         accelerator = (label_formatter.
                                        get_accelerator_from_label_value(value))
-                        viable = [value.lower(), accelerator.lower()]                        
+                        viable = [value.lower(), accelerator.lower()]
                         if acc_type.lower() not in viable:
                             continue
                         if is_tpu_on_gke(acc_type):
@@ -3304,6 +3304,18 @@ def is_tpu_on_gke(accelerator: str, normalize: bool = True) -> bool:
     return accelerator in GKE_TPU_ACCELERATOR_TO_GENERATION
 
 
+def is_tenstorrent_npu(accelerator: str) -> bool:
+    """Determines if the given accelerator is a Tenstorrent NPU.
+
+    Tenstorrent NPU uses skypilot.co/accelerator label with loudbox value.
+    TT-LoudBox: device plugin allocates all tenstorrent devices on a node as a single unit.
+    """
+    if not accelerator:
+        return False
+    acc_type_lower = accelerator.lower()
+    return acc_type_lower == 'loudbox'
+
+
 def get_node_accelerator_count(context: Optional[str],
                                attribute_dict: dict) -> int:
     """Retrieves the count of accelerators from a node's resource dictionary.
@@ -3766,10 +3778,10 @@ def get_job_pods(cluster_name: str,
     return pods
 
 
-def get_pod_status_and_node(pod_name: str, namespace: str,
-                            context: Optional[str]) -> Tuple[bool, str]:
-    """
-    Checks if a pod's status is 'Running' and returns its node name.
+def get_pod_status_and_node(
+        pod_name: str, namespace: str,
+        context: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """Checks if a pod's status is 'Running' and returns its node name.
 
     Returns a tuple: (is_running, node_name)
     """
@@ -3788,14 +3800,13 @@ def get_pod_status_and_node(pod_name: str, namespace: str,
         return is_normal, node_name
     except kubernetes.api_exception() as e:
         # Handle cases where the pod doesn't exist or an error occurs
-        print(f"Error getting pod {pod_name} in namespace {namespace}: {e}")
+        print(f'Error getting pod {pod_name} in namespace {namespace}: {e}')
         return False, None
 
 
 def update_node_suspicion_count(node_name: str, context: Optional[str],
                                 delta: int) -> None:
-    """
-    Increments the 'gpu-suspicion-count' label on a given node.
+    """Increments the 'gpu-suspicion-count' label on a given node.
     If the label doesn't exist, it's set to 1.
     """
     api = kubernetes.core_api(context)
@@ -3824,8 +3835,7 @@ def update_node_suspicion_count(node_name: str, context: Optional[str],
 
         # Apply the patch to the node
         api.patch_node(name=node_name, body=patch)
-        print(
-            f"Updated 'gpu-suspicion-count' on node {node_name} to {new_count}")
+        print(f'Updated gpu-suspicion-count on node {node_name} to {new_count}')
 
     except kubernetes.api_exception() as e:
-        print(f"Error updating node label for {node_name}: {e}")
+        print(f'Error updating node label for {node_name}: {e}')
